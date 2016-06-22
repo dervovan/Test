@@ -1,0 +1,184 @@
+﻿@using NCruiseControl.Domain.Entities.Autotests;
+@model List<EsxStand>
+
+@{
+    ViewBag.Title = "EsxStands";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+}
+
+<script type="text/javascript">
+    $(function() {
+        $(".restOfAutotestMachines").hide();
+        $(".autotestMachinesHeader").click(function () {
+            var clickedHeader = $(this);
+            clickedHeader.next(".restOfAutotestMachines").slideToggle(400, function () {
+                var machineTableHeight = clickedHeader.parent(".autotestMachine").height();
+                var commentContainer = clickedHeader.parents("tr").find(".autotest-stand-comment").parent("td");
+                var textArea = commentContainer.find(".autotest-stand-comment");
+                var commentContainerHeight = commentContainer.height();
+                if (machineTableHeight > 50) {
+                    textArea.height(commentContainerHeight - 6);
+                } else {
+                    textArea.height(32);
+                }
+            });
+        });
+
+        var commentBeforeFocus;
+        
+        $(".autotest-stand-comment")
+            .on("focus", function () {
+                var textarea = $(this);
+                commentBeforeFocus = textarea.val();
+            })
+            .blur(function () {
+                var textarea = $(this);
+                var standName = textarea.data("name");
+                if (commentBeforeFocus != textarea.val()) {
+                    var def = $.ajax({
+                        type: "POST",
+                        url: "@Url.Action("UpdateStandComment", "Autotest")",
+                        data:
+                        {
+                            name: standName,
+                            text: textarea.val()
+                        },
+                        beforeSend: function() {
+                            textarea.css("background", "red");
+                        }
+                    });
+
+                    def.done(function(data) {
+                        textarea.css("background", "#a6e2a6");
+                    });
+                    def.fail(function(jqXHR, textStatus, errorThrown) {
+                        alert("Ошибка обновления комментария");
+                    });
+
+                    def.always(function() {
+
+                    });
+                }
+            });
+
+        $(".takeStandButton")
+            .click(function () {
+                var context = this;
+                var def = $.ajax({
+                    type: "POST",
+                    url: "@Url.Action("ModifyStand", "Autotest")",
+                    data:
+                    {
+                        name: $(context).data("name")
+                    }
+                });
+
+                def.done(function (data) {
+                    if (!data) {
+                        alert("Ошибка обновления файла esx_stand.xml");
+                        return;
+                    }
+                    if (data.Success) {
+                        $(context).find("span").html(data.buttonText);
+                        var busyBy = $(context).closest("tr").find(".busyBy");
+                        busyBy.html(data.BusyBy);
+                        if (data.BusyBy == "Свободен") {
+                            busyBy.css("color", "green");
+                        } else {
+                            busyBy.css("color", "black");
+                        }
+                    } else {
+                        alert(data.Message);
+                    }
+                });
+                
+                def.fail(function(jqXHR, textStatus, errorThrown) {
+                    alert("Ошибка обращения к серверу при обновлении esx_stand.xml");
+                });
+
+                def.always(function() {
+                });
+            });
+            
+                
+    });
+</script>
+
+<h3>@Html.ActionLink("Home", "Index", "Home")</h3>
+
+<h2>Настройка стендов автотестирования</h2>
+
+@if (!string.IsNullOrEmpty((string) TempData["error"]))
+{
+    <h3 class="error-text">
+        @TempData["error"]
+    </h3>
+    @TempData.Remove("error");
+}
+
+@if (Model.Count != 0)
+{
+    <div class="autotestStands">
+        <table class="simple-table" style = "text-align: center">
+            <colgroup>
+                <col style = "width:10%">
+                <col style = "width:10%">
+                <col style = "width:10%">
+                <col style = "width:10%">
+                <col style = "width:10%">
+                <col style = "width:30%">
+                <col style = "width:20%">
+            </colgroup>
+            <tr class="grey-back">
+                <th>Имя стенда</th>
+                <th>Кем занято</th>
+                <th>Занять/Освободить</th>
+                <th>Категория стенда</th>
+                <th>Хост</th>
+                <th>Список машин</th>
+                <th>Комментарий<br/>для сохранения кликните вне поля</th>
+            </tr>
+            @foreach (EsxStand stand in Model)
+            {
+                //using (Html.BeginForm("ModifyStand", "Autotest", new { name = stand.StandName, isBusy = stand.IsBusy }, FormMethod.Post))
+                //{
+                    <tr>
+                        <td>@stand.StandName</td>
+                        @{
+                        if (stand.IsBusy)
+                        {
+                            <td class="busyBy">@stand.OwnerName</td>
+                        }
+                        else
+                        {
+                            <td class="busyBy" style="color: green">Свободен</td>
+                        }
+                        }
+                        <td>
+                            @if (stand.ShowButton)
+                            {
+                                <div data-name ="@stand.StandName" style="width: 150px;" type ="submit" class="takeStandButton ui-button ui-widget ui-state-default ui-corner-all ui-button-text-only ui-state-focus">
+                                    <span class="ui-button-text">@String.Format("{0}", (stand.GetButtonText()))</span>
+                                </div>
+                            }
+                            else
+                            {
+                                <span>
+                                    @*@String.Format("{0}",string.IsNullOrEmpty(stand.OwnerName) ? "Неизвестно" : stand.OwnerName)*@
+                                </span>
+                            }
+                        </td>
+                        <td>@stand.Category</td>
+                        <td>@stand.url</td>
+                        <td>@Html.Partial("Autotest/AutotestMachineTable", stand.Machines)</td>
+                        <td><textarea class="autotest-stand-comment" data-name="@stand.StandName">@stand.Comment</textarea></td>
+                    </tr>
+                @*}*@
+            }
+        </table>
+    </div>
+}
+else
+{
+   <h3>Видимо, файла esx_stands.xml нет на диске или он пустой</h3> 
+}

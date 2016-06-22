@@ -1,0 +1,114 @@
+﻿@model NCruiseControl.Model.RunningAutotestModel
+@{
+    ViewBag.Title = "Управление автотестами";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    int i = 0;
+    var errors = TempData["error"] as List<string>;
+}
+
+<script type="text/javascript">
+    $(document).ready(function () {
+
+        window.InitialAutotestBranchHRef = $("#autotestManage a").attr("href");
+        window.AutotestGrid = $('#content');
+        // Initialize Masonry
+        AutotestGrid.masonry({
+            columnWidth: 282,
+            itemSelector: '.branchAutotests',
+            isFitWidth: true,
+            isAnimated: !Modernizr.csstransitions
+        });
+    });
+
+    $(function() {
+        $("#autotestManageWorkArea .stopTest").click(function () {
+            var curDiv = this;
+            var $curDiv = $(curDiv);
+            var $img = $curDiv.find("img");
+            var $currentTR = $curDiv.parents("tr");
+            var $currentDivContainer = $curDiv.parents("div.branchAutotests");
+
+            var def = $.ajax({
+                type: "POST",
+                url: "@Url.Action("StopAutotest", "Autotest")",
+                data:
+                {
+                    branch: $curDiv.data("branch"),
+                    build: $curDiv.data("build")
+                },
+                beforeSend: function () {
+                    $img.attr("src", "@Href("~/Content/Images/loading.gif")");
+                }
+            });
+
+            def.done(function (data) {
+                debugger;
+                if (data.Success) {
+                    $currentTR.remove();
+                } else {
+                    alert(data.Message);
+                }
+            });
+            def.fail(function (jqXHR, textStatus, errorThrown) {
+                alert("Ошибка связи с сервером");
+            });
+
+            def.always(function () {
+                $img.attr("src", "@Href("~/Content/Images/BuildStatus/failed.png")");
+                var isEmpty = 0 == $currentDivContainer.find("tr").length;
+                if (isEmpty) {
+                    $currentDivContainer.remove();
+                    AutotestGrid.masonry('remove', $currentDivContainer);
+                }
+                AutotestGrid.masonry('layout');
+            });
+        });
+
+        $("#branches").change(function () {
+            var branch = $(this).find("option:selected").text();
+            $("#autotestManage a").attr("href", window.InitialAutotestBranchHRef + "/" + branch);
+        });
+
+        $("#branches").val('0').change();
+    });
+</script>
+
+<h3 id="home">@Html.ActionLink("Вернуться на главную", "Index", "Home")</h3>
+<div id ="autotestManageWorkArea">
+    
+    @if (errors != null && errors.Count != 0)
+    {
+        <div style="margin-top: 50px;" >
+            <h2>Произошла ошибка:</h2>
+            @foreach (string error in errors)
+            {
+                <div style="color: red;">@error</div>;
+            }
+        </div>
+    }
+    else if (Model.RunningBuilds.Count != 0)
+    {
+        if (Model.ExistingBranches.Any())
+        {
+            <div>
+                @Html.DropDownList("branches", Model.ExistingBranches.Select(o => new SelectListItem {Text = o, Value = (i++).ToString()}))
+                <h3 id="autotestManage">@Html.ActionLink("Настройка автотестов для ветки ", "AutotestSettingsMaster", "Autotest")</h3>
+            </div>
+        }
+        <div style="clear: both"></div>
+
+        <h3 id="activeAutotestTitle">Активные автотесты</h3>
+        <h3 id="stopAllAutotests">@Html.ActionLink("Остановить все тесты", "StopAllAutotest", "Autotest")</h3>
+        <div style="clear: both;"></div>
+        <div id="content">
+            @foreach (var branchBuilds in Model.RunningBuilds)
+            {
+                @Html.Partial("Autotest/RunningAutotestTable", branchBuilds.Value);
+            }
+        </div>
+    }
+    else 
+    {
+        <h2>А нет тут ничего, пусто</h2>
+    }
+</div>
